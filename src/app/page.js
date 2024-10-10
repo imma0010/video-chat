@@ -36,6 +36,9 @@ const App = () => {
         const peerConnection = new RTCPeerConnection({
           iceServers: [
             {
+              urls: 'stun:stun.l.google.com:19302' // Public STUN server
+            },
+            {
               urls: [
                 'stun:bn-turn2.xirsys.com',
                 'turn:bn-turn2.xirsys.com:80?transport=udp',
