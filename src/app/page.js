@@ -2,25 +2,22 @@
 import { useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 
-// Use the correct deployed WebSocket server URL
 const socket = io('https://video-chat-backend-2mw2.onrender.com');
 
 const App = () => {
   const [stream, setStream] = useState();
   const [myPeerConnection, setMyPeerConnection] = useState();
-  const [remoteStream, setRemoteStream] = useState();
+  const [remoteStream, setRemoteStream] = useState(new MediaStream());
   const myVideo = useRef();
   const remoteVideo = useRef();
-  const roomId = 'my-room'; // Static room ID
-  const iceCandidateQueue = useRef([]); // Persist across renders
+  const roomId = 'my-room'; 
+  const iceCandidateQueue = useRef([]);
 
   useEffect(() => {
-    // Request camera and microphone permissions
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
       setStream(currentStream);
       myVideo.current.srcObject = currentStream;
 
-      // Setup peer connection with both STUN and TURN servers for NAT traversal
       const peerConnection = new RTCPeerConnection({
         iceServers: [
           {
@@ -40,82 +37,77 @@ const App = () => {
       });
       setMyPeerConnection(peerConnection);
 
-      // Add local media stream tracks to peer connection
+      // Add local stream tracks
       currentStream.getTracks().forEach((track) => {
         peerConnection.addTrack(track, currentStream);
       });
 
-      // Handle incoming remote stream
+      // Handle incoming remote track
       peerConnection.ontrack = (event) => {
-        console.log('Remote track received', event);
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-          remoteVideo.current.srcObject = event.streams[0];
-          console.log('Remote stream set to video element');
-        } else {
-          console.error('No remote stream found');
-        }
+        console.log('ontrack event received:', event);
+        event.streams[0].getTracks().forEach(track => {
+          console.log('Adding remote track to remote stream:', track);
+          remoteStream.addTrack(track);
+        });
+        remoteVideo.current.srcObject = remoteStream; 
       };
 
-      // Handle ICE candidate gathering and exchange
+      // Fallback for onaddstream if ontrack doesn't work (older browsers)
+      peerConnection.onaddstream = (event) => {
+        console.log('onaddstream event received:', event);
+        remoteVideo.current.srcObject = event.stream;
+      };
+
+      // ICE candidate handling
       peerConnection.onicecandidate = (event) => {
-        console.log('ICE candidate event:', event);
         if (event.candidate) {
+          console.log('Sending ICE candidate:', event.candidate);
           socket.emit('ice-candidate', roomId, event.candidate);
         }
       };
 
-      // Receive ICE candidates and add them
+      // ICE connection state change handler
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log('ICE connection state changed to:', peerConnection.iceConnectionState);
+        if (peerConnection.iceConnectionState === 'failed') {
+          console.error('ICE connection failed.');
+        }
+      };
+
+      // Handling incoming ICE candidates
       socket.on('ice-candidate', (candidate) => {
         console.log('Received ICE candidate:', candidate);
-        if (peerConnection.remoteDescription) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-            .catch(error => console.error('Error adding ICE candidate:', error));
-        } else {
-          console.log('Queueing ICE candidate');
-          iceCandidateQueue.current.push(candidate); // Queue the ICE candidate if remote description is not set
-        }
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(error => {
+          console.error('Error adding received ICE candidate:', error);
+        });
       });
 
-      // User connected event triggers an offer
+      // When a user connects, send an offer
       socket.on('user-connected', () => {
         console.log('User connected, creating offer...');
-        if (peerConnection.signalingState === 'stable') {
-          createOffer(peerConnection);
-        }
+        createOffer(peerConnection);
       });
 
-      // Handle incoming offer
+      // Handle receiving an offer
       socket.on('offer', (offer) => {
         console.log('Received offer:', offer);
-        if (peerConnection.signalingState === 'stable') {
-          peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-            .then(() => {
-              createAnswer(peerConnection);
-              processQueuedIceCandidates(peerConnection); // Process any queued ICE candidates
-            })
-            .catch(error => console.error('Error setting remote description:', error));
-        }
+        peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+          .then(() => createAnswer(peerConnection))
+          .catch(error => console.error('Error setting remote description:', error));
       });
 
-      // Handle incoming answer
+      // Handle receiving an answer
       socket.on('answer', (answer) => {
         console.log('Received answer:', answer);
-        if (peerConnection.signalingState === 'have-local-offer') {
-          peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
-            .then(() => {
-              processQueuedIceCandidates(peerConnection); // Process any queued ICE candidates
-            })
-            .catch(error => console.error('Error setting remote description:', error));
-        }
+        peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
+          .catch(error => console.error('Error setting remote description:', error));
       });
 
-      // Join the room
+      // Join room
       socket.emit('join-room', roomId, socket.id);
       console.log(`Joined room ${roomId} with ID ${socket.id}`);
 
       return () => {
-        // Clean up event listeners on unmount
         socket.off('ice-candidate');
         socket.off('user-connected');
         socket.off('offer');
@@ -123,38 +115,28 @@ const App = () => {
       };
     });
 
-    // Create an SDP offer and send it
+    // Create and send SDP offer
     const createOffer = (peerConnection) => {
-      console.log('Creating SDP offer...');
+      console.log('Creating offer...');
       peerConnection.createOffer()
         .then((offer) => peerConnection.setLocalDescription(offer))
         .then(() => {
-          console.log('Offer created and set as local description:', peerConnection.localDescription);
+          console.log('Offer set as local description:', peerConnection.localDescription);
           socket.emit('offer', roomId, peerConnection.localDescription);
         })
         .catch(error => console.error('Error creating offer:', error));
     };
 
-    // Create an SDP answer and send it
+    // Create and send SDP answer
     const createAnswer = (peerConnection) => {
-      console.log('Creating SDP answer...');
+      console.log('Creating answer...');
       peerConnection.createAnswer()
         .then((answer) => peerConnection.setLocalDescription(answer))
         .then(() => {
-          console.log('Answer created and set as local description:', peerConnection.localDescription);
+          console.log('Answer set as local description:', peerConnection.localDescription);
           socket.emit('answer', roomId, peerConnection.localDescription);
         })
         .catch(error => console.error('Error creating answer:', error));
-    };
-
-    // Process ICE candidates queued while waiting for SDP exchange to complete
-    const processQueuedIceCandidates = (peerConnection) => {
-      console.log('Processing queued ICE candidates...');
-      while (iceCandidateQueue.current.length > 0) {
-        const candidate = iceCandidateQueue.current.shift();
-        peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-          .catch(error => console.error('Error adding ICE candidate:', error));
-      }
     };
   }, []);
 
