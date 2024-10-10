@@ -1,101 +1,141 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState, useRef } from 'react';
+import io from 'socket.io-client';
+
+const VideoChat = ({ appointmentId, token }) => {
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const peerConnectionRef = useRef(null);  // Store the peer connection in a ref
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+
+  const connectionStarted = useRef(false);  // Ensure the connection is started only once
+
+  useEffect(() => {
+    const socket = io(process.env.NEXT_PUBLIC_SERVER_URL);  // Connect to the signaling server
+
+    // Join the appointment room with token
+    socket.emit('joinAppointment', { token, appointmentId });
+
+    // First peer to connect becomes the caller
+    socket.on('caller', () => {
+      if (!connectionStarted.current) {
+        console.log('Connected as caller');
+        startWebRTCConnection(socket, true);  // Start WebRTC as the caller
+        connectionStarted.current = true;
+      }
+    });
+
+    // Second peer to connect becomes the answerer
+    socket.on('answerer', () => {
+      if (!connectionStarted.current) {
+        console.log('Connected as answerer');
+        startWebRTCConnection(socket, false);  // Start WebRTC as the answerer
+        connectionStarted.current = true;
+      }
+    });
+
+    socket.on('error', (data) => {
+      console.error(data);
+    });
+
+    return () => {
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();  // Close WebRTC connection on unmount
+      }
+      socket.disconnect();  // Disconnect socket on unmount
+    };
+  }, [appointmentId, token]);
+
+  const startWebRTCConnection = (socket, isCaller) => {
+    const config = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' }
+      ],
+    };
+
+    const peerConnection = new RTCPeerConnection(config);
+    peerConnectionRef.current = peerConnection;  // Save peerConnection to ref
+
+    // Get local media stream
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
+      setLocalStream(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;  // Display local video
+      }
+
+      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+    }).catch((error) => {
+      console.error('Error accessing media devices:', error);
+    });
+
+    // If this peer is the caller, create and send an offer
+    if (isCaller) {
+      peerConnection.createOffer().then((offer) => {
+        console.log('Sending offer:', offer);
+        return peerConnection.setLocalDescription(offer);
+      }).then(() => {
+        socket.emit('offer', peerConnection.localDescription);  // Send the offer to the other peer
+      }).catch((error) => {
+        console.error('Error creating offer:', error);
+      });
+    }
+
+    // Handle incoming offer (for the answerer)
+    socket.on('offer', (offer) => {
+      console.log('Received offer:', offer);  // Log the received offer
+      peerConnection.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
+        return peerConnection.createAnswer();  // Create an answer in response to the offer
+      }).then((answer) => {
+        console.log('Sending answer:', answer);  // Log the answer
+        return peerConnection.setLocalDescription(answer);
+      }).then(() => {
+        socket.emit('answer', peerConnection.localDescription);  // Send the answer back to the caller
+      }).catch((error) => {
+        console.error('Error handling offer/answer exchange:', error);
+      });
+    });
+
+    // Handle incoming answer (for the caller)
+    socket.on('answer', (answer) => {
+      console.log('Received answer:', answer);  // Log the received answer
+      peerConnection.setRemoteDescription(new RTCSessionDescription(answer)).catch((error) => {
+        console.error('Error setting remote description:', error);
+      });
+    });
+
+    // Handle ICE candidates
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log('Sending ICE candidate:', event.candidate);
+        socket.emit('iceCandidate', event.candidate);  // Send ICE candidates to the other peer
+      }
+    };
+
+    socket.on('iceCandidate', (candidate) => {
+      console.log('Received ICE candidate:', candidate);
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+        console.error('Error adding received ICE candidate:', error);
+      });
+    });
+
+    // Handle remote stream
+    peerConnection.ontrack = (event) => {
+      console.log('Received remote track:', event.streams[0]);
+      setRemoteStream(event.streams[0]);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = event.streams[0];  // Display remote video
+      }
+    };
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div>
+      <video ref={localVideoRef} autoPlay muted playsInline />
+      <video ref={remoteVideoRef} autoPlay playsInline />
     </div>
   );
-}
+};
+
+export default VideoChat;
