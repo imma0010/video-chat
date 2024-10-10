@@ -40,16 +40,16 @@ const App = () => {
             },
             {
               urls: [
-                'stun:bn-turn2.xirsys.com',
-                'turn:bn-turn2.xirsys.com:80?transport=udp',
-                'turn:bn-turn2.xirsys.com:3478?transport=udp',
-                'turn:bn-turn2.xirsys.com:80?transport=tcp',
-                'turn:bn-turn2.xirsys.com:3478?transport=tcp',
-                'turns:bn-turn2.xirsys.com:443?transport=tcp',
-                'turns:bn-turn2.xirsys.com:5349?transport=tcp'
+                "stun:bn-turn2.xirsys.com",
+                "turn:bn-turn2.xirsys.com:80?transport=udp",
+                "turn:bn-turn2.xirsys.com:3478?transport=udp",
+                "turn:bn-turn2.xirsys.com:80?transport=tcp",
+                "turn:bn-turn2.xirsys.com:3478?transport=tcp",
+                "turns:bn-turn2.xirsys.com:443?transport=tcp",
+                "turns:bn-turn2.xirsys.com:5349?transport=tcp",
               ],
-              username: 'VKflMZ9VGzaGKJx40fds8nBUmPIO18HUWk3wpIQEp9QLr7Q2NY9oGmDa2L1myiAjAAAAAGcH_dViYWJlbA==',
-              credential: 'fd2612b6-8722-11ef-af47-0242ac140004'
+              username: 'Sazomc2jQNHULkg18A2-fC9pNaAlxaK0zSzM0cm4jrhJeVI8oPXmDcxXaKD1CO-AAAAAAGcID4ViYWJlbA==',
+              credential: '87a7376c-872d-11ef-a4b5-0242ac140004'
             }
           ]
         });
