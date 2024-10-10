@@ -50,6 +50,11 @@ const App = () => {
               ],
               username: 'Sazomc2jQNHULkg18A2-fC9pNaAlxaK0zSzM0cm4jrhJeVI8oPXmDcxXaKD1CO-AAAAAAGcID4ViYWJlbA==',
               credential: '87a7376c-872d-11ef-a4b5-0242ac140004'
+            },
+            {
+              urls: 'turn:openrelay.metered.ca:80',
+              username: 'openrelayproject',
+              credential: 'openrelayproject'
             }
           ]
         });
