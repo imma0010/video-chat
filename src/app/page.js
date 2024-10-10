@@ -1,17 +1,16 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 
 const socket = io('https://video-chat-backend-2mw2.onrender.com');
 
 const App = () => {
-  const [stream, setStream] = useState(null);
-  const [myPeerConnection, setMyPeerConnection] = useState(null);
-  const myVideo = useRef();
-  const remoteVideo = useRef();
+  const myVideo = useRef(null);
+  const remoteVideo = useRef(null);
   const roomId = 'my-room';
   const iceCandidateQueue = useRef([]);
-  
+  const myPeerConnection = useRef(null);
+
   useEffect(() => {
     const supportsWebRTC = () => {
       return !!(
@@ -27,7 +26,6 @@ const App = () => {
     }
 
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((currentStream) => {
-      setStream(currentStream);
       myVideo.current.srcObject = currentStream;
 
       const peerConnection = new RTCPeerConnection({
@@ -47,7 +45,7 @@ const App = () => {
           }
         ]
       });
-      setMyPeerConnection(peerConnection);
+      myPeerConnection.current = peerConnection;
 
       // Add local stream tracks to peer connection
       currentStream.getTracks().forEach((track) => {
@@ -57,14 +55,13 @@ const App = () => {
       // Handle incoming remote track
       peerConnection.ontrack = (event) => {
         console.log('ontrack event received:', event);
-        const remoteStream = new MediaStream(); // Dynamically create the MediaStream
-        event.streams[0].getTracks().forEach((track) => {
-          remoteStream.addTrack(track);
-        });
-        remoteVideo.current.srcObject = remoteStream; 
+        const [remoteStream] = event.streams;
+        if (remoteStream) {
+          remoteVideo.current.srcObject = remoteStream;
+        }
       };
 
-      // Fallback for onaddstream if ontrack doesn't work (for older browsers)
+      // Fallback for onaddstream (for older browsers)
       peerConnection.onaddstream = (event) => {
         console.log('onaddstream event received:', event);
         remoteVideo.current.srcObject = event.stream;
@@ -89,32 +86,57 @@ const App = () => {
       // Handle incoming ICE candidates
       socket.on('ice-candidate', (candidate) => {
         console.log('Received ICE candidate:', candidate);
-        peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
-          console.error('Error adding received ICE candidate:', error);
-        });
+        if (myPeerConnection.current.remoteDescription) {
+          myPeerConnection.current.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+            console.error('Error adding received ICE candidate:', error);
+          });
+        } else {
+          console.log('Remote description not set yet, queueing ICE candidate.');
+          iceCandidateQueue.current.push(candidate);
+        }
       });
 
       // When a user connects, send an offer
       socket.on('user-connected', () => {
         console.log('User connected, creating offer...');
-        createOffer(peerConnection);
+        createOffer();
       });
 
       // Handle receiving an offer
       socket.on('offer', (offer) => {
         console.log('Received offer:', offer);
-        peerConnection
+        myPeerConnection.current
           .setRemoteDescription(new RTCSessionDescription(offer))
-          .then(() => createAnswer(peerConnection))
+          .then(() => {
+            // Process queued ICE candidates
+            iceCandidateQueue.current.forEach((candidate) => {
+              myPeerConnection.current.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+                console.error('Error adding queued ICE candidate:', error);
+              });
+            });
+            iceCandidateQueue.current = [];
+            createAnswer();
+          })
           .catch((error) => console.error('Error setting remote description:', error));
       });
 
       // Handle receiving an answer
       socket.on('answer', (answer) => {
         console.log('Received answer:', answer);
-        peerConnection.setRemoteDescription(new RTCSessionDescription(answer)).catch((error) => {
-          console.error('Error setting remote description:', error);
-        });
+        myPeerConnection.current
+          .setRemoteDescription(new RTCSessionDescription(answer))
+          .then(() => {
+            // Process queued ICE candidates
+            iceCandidateQueue.current.forEach((candidate) => {
+              myPeerConnection.current.addIceCandidate(new RTCIceCandidate(candidate)).catch((error) => {
+                console.error('Error adding queued ICE candidate:', error);
+              });
+            });
+            iceCandidateQueue.current = [];
+          })
+          .catch((error) => {
+            console.error('Error setting remote description:', error);
+          });
       });
 
       // Join room
@@ -130,27 +152,27 @@ const App = () => {
     });
 
     // Create and send SDP offer
-    const createOffer = (peerConnection) => {
+    const createOffer = () => {
       console.log('Creating offer...');
-      peerConnection
+      myPeerConnection.current
         .createOffer()
-        .then((offer) => peerConnection.setLocalDescription(offer))
+        .then((offer) => myPeerConnection.current.setLocalDescription(offer))
         .then(() => {
-          console.log('Offer set as local description:', peerConnection.localDescription);
-          socket.emit('offer', roomId, peerConnection.localDescription);
+          console.log('Offer set as local description:', myPeerConnection.current.localDescription);
+          socket.emit('offer', roomId, myPeerConnection.current.localDescription);
         })
         .catch((error) => console.error('Error creating offer:', error));
     };
 
     // Create and send SDP answer
-    const createAnswer = (peerConnection) => {
+    const createAnswer = () => {
       console.log('Creating answer...');
-      peerConnection
+      myPeerConnection.current
         .createAnswer()
-        .then((answer) => peerConnection.setLocalDescription(answer))
+        .then((answer) => myPeerConnection.current.setLocalDescription(answer))
         .then(() => {
-          console.log('Answer set as local description:', peerConnection.localDescription);
-          socket.emit('answer', roomId, peerConnection.localDescription);
+          console.log('Answer set as local description:', myPeerConnection.current.localDescription);
+          socket.emit('answer', roomId, myPeerConnection.current.localDescription);
         })
         .catch((error) => console.error('Error creating answer:', error));
     };
@@ -160,8 +182,8 @@ const App = () => {
     <div>
       <h2>Video Call Application</h2>
       <div>
-        <video ref={myVideo} autoPlay playsInline muted></video>
-        <video ref={remoteVideo} autoPlay playsInline></video>
+        <video ref={myVideo} autoPlay playsInline muted style={{ width: '45%' }}></video>
+        <video ref={remoteVideo} autoPlay playsInline style={{ width: '45%' }}></video>
       </div>
     </div>
   );
