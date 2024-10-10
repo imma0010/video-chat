@@ -22,14 +22,6 @@ const App = () => {
 
       // Setup peer connection with both STUN and TURN servers for NAT traversal
       const peerConnection = new RTCPeerConnection({
-        // iceServers: [
-        //   { urls: 'stun:stun.l.google.com:19302' }, // Google's free STUN server
-        //   // {
-        //   //   urls: 'turn:your-turn-server.com', // TURN server for relay when P2P fails
-        //   //   username: 'your-username',
-        //   //   credential: 'your-credential'
-        //   // }
-        // ]
         iceServers: [
           {
             urls: [
@@ -45,8 +37,6 @@ const App = () => {
             credential: 'fd2612b6-8722-11ef-af47-0242ac140004'
           }
         ]
-        // "iceServers": 
-        // {"username":"89ddbf36-ccdc-11e8-b472-8624bbdc6721","urls":["stun:w1.xirsys.com","turn:w1.xirsys.com:80?transport=udp","turn:w1.xirsys.com:3478?transport=udp","turn:w1.xirsys.com:80?transport=tcp","turn:w1.xirsys.com:3478?transport=tcp","turns:w1.xirsys.com:443?transport=tcp","turns:w1.xirsys.com:5349?transport=tcp"],"credential":"89ddbfb8-ccdc-11e8-8a3d-a2ce2294350d"}
       });
       setMyPeerConnection(peerConnection);
 
@@ -57,12 +47,19 @@ const App = () => {
 
       // Handle incoming remote stream
       peerConnection.ontrack = (event) => {
-        setRemoteStream(event.streams[0]);
-        remoteVideo.current.srcObject = event.streams[0];
+        console.log('Remote track received', event);
+        if (event.streams && event.streams[0]) {
+          setRemoteStream(event.streams[0]);
+          remoteVideo.current.srcObject = event.streams[0];
+          console.log('Remote stream set to video element');
+        } else {
+          console.error('No remote stream found');
+        }
       };
 
       // Handle ICE candidate gathering and exchange
       peerConnection.onicecandidate = (event) => {
+        console.log('ICE candidate event:', event);
         if (event.candidate) {
           socket.emit('ice-candidate', roomId, event.candidate);
         }
@@ -70,16 +67,19 @@ const App = () => {
 
       // Receive ICE candidates and add them
       socket.on('ice-candidate', (candidate) => {
+        console.log('Received ICE candidate:', candidate);
         if (peerConnection.remoteDescription) {
           peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
             .catch(error => console.error('Error adding ICE candidate:', error));
         } else {
+          console.log('Queueing ICE candidate');
           iceCandidateQueue.current.push(candidate); // Queue the ICE candidate if remote description is not set
         }
       });
 
       // User connected event triggers an offer
       socket.on('user-connected', () => {
+        console.log('User connected, creating offer...');
         if (peerConnection.signalingState === 'stable') {
           createOffer(peerConnection);
         }
@@ -87,6 +87,7 @@ const App = () => {
 
       // Handle incoming offer
       socket.on('offer', (offer) => {
+        console.log('Received offer:', offer);
         if (peerConnection.signalingState === 'stable') {
           peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
             .then(() => {
@@ -99,6 +100,7 @@ const App = () => {
 
       // Handle incoming answer
       socket.on('answer', (answer) => {
+        console.log('Received answer:', answer);
         if (peerConnection.signalingState === 'have-local-offer') {
           peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
             .then(() => {
@@ -110,6 +112,7 @@ const App = () => {
 
       // Join the room
       socket.emit('join-room', roomId, socket.id);
+      console.log(`Joined room ${roomId} with ID ${socket.id}`);
 
       return () => {
         // Clean up event listeners on unmount
@@ -122,9 +125,11 @@ const App = () => {
 
     // Create an SDP offer and send it
     const createOffer = (peerConnection) => {
+      console.log('Creating SDP offer...');
       peerConnection.createOffer()
         .then((offer) => peerConnection.setLocalDescription(offer))
         .then(() => {
+          console.log('Offer created and set as local description:', peerConnection.localDescription);
           socket.emit('offer', roomId, peerConnection.localDescription);
         })
         .catch(error => console.error('Error creating offer:', error));
@@ -132,9 +137,11 @@ const App = () => {
 
     // Create an SDP answer and send it
     const createAnswer = (peerConnection) => {
+      console.log('Creating SDP answer...');
       peerConnection.createAnswer()
         .then((answer) => peerConnection.setLocalDescription(answer))
         .then(() => {
+          console.log('Answer created and set as local description:', peerConnection.localDescription);
           socket.emit('answer', roomId, peerConnection.localDescription);
         })
         .catch(error => console.error('Error creating answer:', error));
@@ -142,6 +149,7 @@ const App = () => {
 
     // Process ICE candidates queued while waiting for SDP exchange to complete
     const processQueuedIceCandidates = (peerConnection) => {
+      console.log('Processing queued ICE candidates...');
       while (iceCandidateQueue.current.length > 0) {
         const candidate = iceCandidateQueue.current.shift();
         peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
