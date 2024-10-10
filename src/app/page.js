@@ -30,7 +30,21 @@ const App = () => {
         //   //   credential: 'your-credential'
         //   // }
         // ]
-        "iceServers":{"username":"VKflMZ9VGzaGKJx40fds8nBUmPIO18HUWk3wpIQEp9QLr7Q2NY9oGmDa2L1myiAjAAAAAGcH_dViYWJlbA==","urls":["stun:bn-turn2.xirsys.com","turn:bn-turn2.xirsys.com:80?transport=udp","turn:bn-turn2.xirsys.com:3478?transport=udp","turn:bn-turn2.xirsys.com:80?transport=tcp","turn:bn-turn2.xirsys.com:3478?transport=tcp","turns:bn-turn2.xirsys.com:443?transport=tcp","turns:bn-turn2.xirsys.com:5349?transport=tcp"],"credential":"fd2612b6-8722-11ef-af47-0242ac140004"}
+        iceServers: [
+          {
+            urls: [
+              'stun:bn-turn2.xirsys.com',
+              'turn:bn-turn2.xirsys.com:80?transport=udp',
+              'turn:bn-turn2.xirsys.com:3478?transport=udp',
+              'turn:bn-turn2.xirsys.com:80?transport=tcp',
+              'turn:bn-turn2.xirsys.com:3478?transport=tcp',
+              'turns:bn-turn2.xirsys.com:443?transport=tcp',
+              'turns:bn-turn2.xirsys.com:5349?transport=tcp'
+            ],
+            username: 'VKflMZ9VGzaGKJx40fds8nBUmPIO18HUWk3wpIQEp9QLr7Q2NY9oGmDa2L1myiAjAAAAAGcH_dViYWJlbA==',
+            credential: 'fd2612b6-8722-11ef-af47-0242ac140004'
+          }
+        ]
         // "iceServers": 
         // {"username":"89ddbf36-ccdc-11e8-b472-8624bbdc6721","urls":["stun:w1.xirsys.com","turn:w1.xirsys.com:80?transport=udp","turn:w1.xirsys.com:3478?transport=udp","turn:w1.xirsys.com:80?transport=tcp","turn:w1.xirsys.com:3478?transport=tcp","turns:w1.xirsys.com:443?transport=tcp","turns:w1.xirsys.com:5349?transport=tcp"],"credential":"89ddbfb8-ccdc-11e8-8a3d-a2ce2294350d"}
       });
