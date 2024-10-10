@@ -34,7 +34,21 @@ const App = () => {
         myVideo.current.srcObject = currentStream;
 
         const peerConnection = new RTCPeerConnection({
-          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] // Use public STUN server for testing
+          iceServers: [
+            {
+              urls: [
+                'stun:bn-turn2.xirsys.com',
+                'turn:bn-turn2.xirsys.com:80?transport=udp',
+                'turn:bn-turn2.xirsys.com:3478?transport=udp',
+                'turn:bn-turn2.xirsys.com:80?transport=tcp',
+                'turn:bn-turn2.xirsys.com:3478?transport=tcp',
+                'turns:bn-turn2.xirsys.com:443?transport=tcp',
+                'turns:bn-turn2.xirsys.com:5349?transport=tcp'
+              ],
+              username: 'VKflMZ9VGzaGKJx40fds8nBUmPIO18HUWk3wpIQEp9QLr7Q2NY9oGmDa2L1myiAjAAAAAGcH_dViYWJlbA==',
+              credential: 'fd2612b6-8722-11ef-af47-0242ac140004'
+            }
+          ]
         });
         myPeerConnection.current = peerConnection;
 
